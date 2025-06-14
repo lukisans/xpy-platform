@@ -27,27 +27,25 @@ $step2_done = !empty($sdk_key);
 
         <!-- Step 1: Create EVM Wallet -->
         <div class="card" style="padding: 20px; margin: 20px 0; border: 1px solid #ccd0d4;">
-            <h2>Step 1: Create EVM Wallet <?php echo $step1_done ? '✅' : ''; ?></h2>
-            <p>You need an EVM-compatible wallet to receive crypto payments.</p>
+            <h2>Step 1: Connect EVM Wallet <?php echo $step1_done ? '✅' : ''; ?></h2>
+            <p>Connect your EVM-compatible wallet to receive crypto payments.</p>
 
             <?php if (!$step1_done): ?>
-                <p>
-                    <a href="https://metamask.io/" target="_blank" class="button button-primary">
-                        Create MetaMask Wallet
-                    </a>
-                    <a href="https://www.coinbase.com/wallet" target="_blank" class="button">
-                        Create Coinbase Wallet
-                    </a>
-                </p>
-                <p><em>After creating your wallet, come back and enter your wallet address below:</em></p>
+                <div style="margin-bottom: 20px;">
+                    <button id="connectMetaMask" class="button button-primary" style="margin-right: 10px;">
+                        Connect MetaMask Wallet
+                    </button>
+                    <span id="connectionStatus" style="margin-left: 10px; color: #666;"></span>
+                </div>
             <?php endif; ?>
 
-            <form method="post">
+            <form method="post" id="walletForm">
                 <table class="form-table">
                     <tr>
                         <th scope="row">Wallet Address</th>
                         <td>
-                            <input type="text" name="wallet_address" value="<?php echo esc_attr($wallet_address); ?>"
+                            <input type="text" name="wallet_address" id="walletAddress"
+                                   value="<?php echo esc_attr($wallet_address); ?>"
                                    placeholder="0x..." style="width: 400px;" />
                             <p class="description">Your EVM wallet address (starts with 0x)</p>
                         </td>
@@ -122,3 +120,129 @@ $step2_done = !empty($sdk_key);
 
     </div>
 </div>
+
+<!-- MetaMask SDK Integration -->
+<script src="https://c0f4f41c-2f55-4863-921b-sdk-docs.github.io/cdn/metamask-sdk.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let sdk;
+    let provider;
+
+    // Initialize MetaMask SDK
+    try {
+        sdk = new MetaMaskSDK.MetaMaskSDK({
+            logging: {
+                developerMode: false,
+            },
+            dappMetadata: {
+                name: 'Lafapay - WordPress Plugin',
+                url: window.location.origin,
+            },
+        });
+    } catch (error) {
+        console.error('Failed to initialize MetaMask SDK:', error);
+    }
+
+    const connectButton = document.getElementById('connectMetaMask');
+    const statusElement = document.getElementById('connectionStatus');
+    const walletAddressInput = document.getElementById('walletAddress');
+
+    if (connectButton) {
+        connectButton.addEventListener('click', async function() {
+            if (!sdk) {
+                updateStatus('MetaMask SDK not available', 'error');
+                return;
+            }
+
+            connectButton.disabled = true;
+            connectButton.textContent = 'Connecting...';
+            updateStatus('Connecting to MetaMask...', 'info');
+
+            try {
+                // Connect to MetaMask
+                const accounts = await sdk.connect();
+                provider = sdk.getProvider();
+
+                if (accounts && accounts.length > 0) {
+                    const walletAddress = accounts[0];
+                    walletAddressInput.value = walletAddress;
+                    updateStatus('✅ Connected successfully!', 'success');
+                    connectButton.textContent = 'Connected';
+                    connectButton.style.backgroundColor = '#46b450';
+
+                    // Optional: Auto-save the wallet address
+                    // You can uncomment the next line if you want to auto-submit
+                    // document.getElementById('walletForm').submit();
+                } else {
+                    throw new Error('No accounts returned');
+                }
+            } catch (error) {
+                console.error('Connection error:', error);
+                updateStatus('❌ Connection failed: ' + error.message, 'error');
+                connectButton.disabled = false;
+                connectButton.textContent = 'Connect MetaMask Wallet';
+            }
+        });
+    }
+
+    function updateStatus(message, type) {
+        if (statusElement) {
+            statusElement.textContent = message;
+            statusElement.style.color = getStatusColor(type);
+        }
+    }
+
+    function getStatusColor(type) {
+        switch (type) {
+            case 'success': return '#46b450';
+            case 'error': return '#dc3232';
+            case 'info': return '#0073aa';
+            default: return '#666';
+        }
+    }
+
+    // Check if MetaMask is already connected
+    if (sdk && typeof window.ethereum !== 'undefined') {
+        window.ethereum.request({ method: 'eth_accounts' })
+            .then(accounts => {
+                if (accounts.length > 0 && !walletAddressInput.value) {
+                    updateStatus('MetaMask detected', 'info');
+                }
+            })
+            .catch(console.error);
+    }
+});
+</script>
+
+<style>
+#connectMetaMask:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.lafapay-status {
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-weight: 500;
+    display: inline-block;
+    margin-left: 10px;
+}
+
+.lafapay-status.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.lafapay-status.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.lafapay-status.info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+</style>
